@@ -3,6 +3,7 @@ import SearchBar from "./components/SearchBar.jsx";
 import ProfileCard from "./components/ProfileCard.jsx";
 import ShareBar from "./components/ShareBar.jsx";
 import { fetchDuolingoUser } from "./api/duolingo.js";
+import { Analytics } from "@vercel/analytics/react";
 
 const DEFAULT_USERNAME = "taemnus";
 
