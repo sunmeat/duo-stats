@@ -33,18 +33,25 @@ export default async function handler(req, res) {
       user.streakData?.currentStreak?.length ?? 0
     );
 
-    // 1. Формирование корректной ссылки на аватар и конвертация в Base64
+    // 1. Формируем прямой URL аватара в формате PNG/JPG
     let avatarBase64 = "";
-    let rawPicture = user.picture || user.avatarUrl || "";
+    let pictureUrl = "";
 
-    if (rawPicture) {
-      if (rawPicture.startsWith("//")) {
-        rawPicture = `https:${rawPicture}`;
-      } else if (!rawPicture.startsWith("http")) {
-        rawPicture = `https://${rawPicture}`;
+    if (user.picture) {
+      pictureUrl = user.picture.startsWith("//")
+        ? `https:${user.picture}`
+        : user.picture;
+
+      // Если аватар отдает .webp, заменяем размер/расширение на png или крупный размер
+      if (pictureUrl.includes("avatar")) {
+        pictureUrl = pictureUrl.replace("/medium", "/large");
       }
-      // Добавляем размер /medium или /large, если это CDN Duolingo
-      avatarBase64 = await fetchAsBase64(rawPicture);
+    } else if (user.avatarUrl) {
+      pictureUrl = user.avatarUrl;
+    }
+
+    if (pictureUrl) {
+      avatarBase64 = await fetchAsBase64(pictureUrl);
     }
 
     // 2. Дата регистрации
@@ -177,7 +184,6 @@ export default async function handler(req, res) {
   }
 }
 
-// Загрузка изображений с заголовками и преобразование в Data URI
 async function fetchAsBase64(url) {
   try {
     const res = await fetch(url, {
@@ -188,7 +194,13 @@ async function fetchAsBase64(url) {
     });
     if (!res.ok) return "";
     const buffer = await res.arrayBuffer();
-    const contentType = res.headers.get("content-type") || "image/png";
+    let contentType = res.headers.get("content-type") || "image/png";
+
+    // SVG или стандартные форматы отставляем, webp подменяем для совместимости браузера с SVG
+    if (contentType.includes("svg")) {
+      contentType = "image/svg+xml";
+    }
+
     return `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
   } catch {
     return "";
