@@ -6,7 +6,13 @@ export default async function handler(req, res) {
 
   try {
     const duoRes = await fetch(
-      `https://www.duolingo.com/2017-06-30/users?username=${username}`
+      `https://www.duolingo.com/2017-06-30/users?username=${username}`,
+      {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+      }
     );
 
     if (!duoRes.ok) {
@@ -27,13 +33,18 @@ export default async function handler(req, res) {
       user.streakData?.currentStreak?.length ?? 0
     );
 
-    // 1. Конвертация аватара в Base64
+    // 1. Формирование корректной ссылки на аватар и конвертация в Base64
     let avatarBase64 = "";
-    if (user.picture) {
-      const picUrl = user.picture.startsWith("http")
-        ? user.picture
-        : `https:${user.picture}`;
-      avatarBase64 = await fetchAsBase64(picUrl);
+    let rawPicture = user.picture || user.avatarUrl || "";
+
+    if (rawPicture) {
+      if (rawPicture.startsWith("//")) {
+        rawPicture = `https:${rawPicture}`;
+      } else if (!rawPicture.startsWith("http")) {
+        rawPicture = `https://${rawPicture}`;
+      }
+      // Добавляем размер /medium или /large, если это CDN Duolingo
+      avatarBase64 = await fetchAsBase64(rawPicture);
     }
 
     // 2. Дата регистрации
@@ -46,7 +57,7 @@ export default async function handler(req, res) {
       creationDateStr = `${day}.${month}.${year}`;
     }
 
-    // 3. Курсы и флаги
+    // 3. Топ курсов и флаги
     const courses = (user.courses || [])
       .map((c) => ({
         title: c.title,
@@ -58,24 +69,16 @@ export default async function handler(req, res) {
 
     const maxXp = courses[0]?.xp || 1;
 
-    // Загрузка всех флагов в Base64 параллельно
     const coursesWithFlags = await Promise.all(
       courses.map(async (c) => {
-        // Качественные SVG-флаги из CDN
-        const flagUrl = `https://d3gq3s1iyyx31w.cloudfront.net/images/flag-sprites-svg.svg#${c.lang}`;
-        // Альтернативный надежный источник растровых/векторных иконок для Duolingo
-        const flagCdn = `https://countryflagsapi.netlify.app/flag/${c.lang}.svg`;
-        
-        // Векторные флаги Duolingo через локальный фетч
-        let flagBase64 = await fetchAsBase64(
-          `https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/${getCountryCode(c.lang)}.svg`
+        const countryCode = getCountryCode(c.lang);
+        const flagBase64 = await fetchAsBase64(
+          `https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/${countryCode}.svg`
         );
-
         return { ...c, flagBase64 };
       })
     );
 
-    // Рендер элементов списка курсов
     const coursesSvg = coursesWithFlags
       .map((c, index) => {
         const y = index * 44;
@@ -84,10 +87,8 @@ export default async function handler(req, res) {
 
         return `
         <g transform="translate(0, ${y})">
-          <!-- Карточка языка -->
           <rect width="280" height="38" rx="12" fill="#202f36" />
           
-          <!-- Флаг -->
           <g transform="translate(10, 9)">
             <clipPath id="flag-clip-${index}">
               <rect width="24" height="20" rx="4" />
@@ -99,13 +100,9 @@ export default async function handler(req, res) {
             }
           </g>
 
-          <!-- Название языка -->
           <text x="42" y="22" class="lang-title">${escapeXml(c.title)}</text>
-          
-          <!-- Количество XP -->
           <text x="268" y="22" text-anchor="end" class="lang-xp">${formattedXp}</text>
           
-          <!-- Прогресс-бар в стиле Duolingo -->
           <rect x="42" y="28" width="226" height="5" rx="2.5" fill="#131f24" />
           <rect x="42" y="28" width="${progressWidth}" height="5" rx="2.5" fill="#ffc800" />
         </g>
@@ -118,7 +115,7 @@ export default async function handler(req, res) {
         <style>
           .bg { fill: #131f24; rx: 20px; }
           .border { stroke: #202f36; stroke-width: 2px; }
-          .name { font: bold 22px 'Feather', 'Segoe UI', Ubuntu, sans-serif; fill: #ffffff; }
+          .name { font: bold 22px 'Segoe UI', Ubuntu, sans-serif; fill: #ffffff; }
           .username { font: bold 14px 'Segoe UI', Ubuntu, sans-serif; fill: #52656d; }
           .streak-card { fill: #202f36; stroke: #ff9600; stroke-width: 2px; rx: 14px; }
           .streak-label { font: bold 11px 'Segoe UI', Ubuntu, sans-serif; fill: #ff9600; letter-spacing: 1px; text-transform: uppercase; }
@@ -149,7 +146,6 @@ export default async function handler(req, res) {
           <text x="110" y="102" text-anchor="middle" class="name">${name}</text>
           <text x="110" y="122" text-anchor="middle" class="username">@${cleanUsername}</text>
 
-          <!-- Плашка Страйка -->
           <g transform="translate(0, 136)">
             <rect width="220" height="62" class="streak-card" />
             <text x="110" y="22" text-anchor="middle" class="streak-label">STREAK</text>
@@ -163,7 +159,6 @@ export default async function handler(req, res) {
           }
         </g>
 
-        <!-- Вертикальный разделитель -->
         <line x1="280" y1="30" x2="280" y2="250" stroke="#202f36" stroke-width="2" stroke-dasharray="4 4" />
 
         <!-- ПРАВАЯ КОЛОНКА -->
@@ -182,10 +177,15 @@ export default async function handler(req, res) {
   }
 }
 
-// Вспомогательная функция для фетча и конвертации ассетов в Base64
+// Загрузка изображений с заголовками и преобразование в Data URI
 async function fetchAsBase64(url) {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
     if (!res.ok) return "";
     const buffer = await res.arrayBuffer();
     const contentType = res.headers.get("content-type") || "image/png";
@@ -195,7 +195,6 @@ async function fetchAsBase64(url) {
   }
 }
 
-// Маппинг кодов языков Duolingo на коды стран для флагов
 function getCountryCode(lang) {
   const map = {
     en: "gb",
