@@ -35,9 +35,18 @@ async function tryFetch(username, fields) {
 }
 
 function normalizeUser(raw) {
-  const avatar = raw.picture
-      ? `https:${raw.picture}`.replace(/\/$/, "") + "/xxlarge"
-      : null;
+  let avatar = null;
+  if (raw.picture) {
+    let rawUrl = raw.picture.startsWith("http")
+        ? raw.picture
+        : `https:${raw.picture}`;
+    rawUrl = rawUrl.replace(/\/$/, "") + "/xxlarge";
+
+    avatar = rawUrl
+        .replace("https://d3gq3s1iyyx31w.cloudfront.net", "/duoimg")
+        .replace("https://s2.duolingo.com", "/duocdn")
+        .replace("https://www.duolingo.com", "/duoapi");
+  }
 
   const streak = Math.max(
       raw.streak ?? 0,
@@ -46,9 +55,6 @@ function normalizeUser(raw) {
 
   const longestStreak = raw.streakData?.longestStreak?.length ?? null;
 
-  console.debug("[duolingo] raw courses:", raw.courses);
-
-  // Сначала все курсы
   const allCourses = (raw.courses ?? [])
       .map((c, i) => ({
         id: c.id || `${c.learningLanguage || "?"}-${c.title || "?"}-${i}`,

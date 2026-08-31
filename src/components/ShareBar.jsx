@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { toPng } from "html-to-image";
+import html2canvas from "html2canvas";
 
 export default function ShareBar({ cardRef, username }) {
   const [copied, setCopied] = useState(false);
+  const [loadingImg, setLoadingImg] = useState(false);
 
   async function copyLink() {
     const url = new URL(window.location.href);
@@ -13,18 +14,26 @@ export default function ShareBar({ cardRef, username }) {
   }
 
   async function downloadImage() {
-    if (!cardRef.current) return;
+    if (!cardRef.current || loadingImg) return;
 
     try {
-      const dataUrl = await toPng(cardRef.current, {
-        backgroundColor: "#ffffff",
-        pixelRatio: 2,
-        cacheBust: true,
-        // если картинка не загрузится из-за CORS — подставится заглушка
-        imagePlaceholder:
-            "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Crect width='72' height='72' rx='36' fill='%2358cc02'/%3E%3Ctext x='36' y='46' font-size='32' text-anchor='middle' fill='white'%3E🦉%3C/text%3E%3C/svg%3E",
+      setLoadingImg(true);
+
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: "#202f36",
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        onclone: (clonedDoc) => {
+          const clonedCard = clonedDoc.querySelector(".card");
+          if (clonedCard) {
+            clonedCard.style.transform = "none";
+          }
+        },
       });
 
+      const dataUrl = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       link.download = `duolingo-${username}.png`;
       link.href = dataUrl;
@@ -32,17 +41,19 @@ export default function ShareBar({ cardRef, username }) {
     } catch (err) {
       console.error("Ошибка сохранения картинки:", err);
       alert("Не удалось сохранить картинку. Попробуйте ещё раз.");
+    } finally {
+      setLoadingImg(false);
     }
   }
 
   return (
-    <div className="share-bar">
-      <button type="button" onClick={copyLink}>
-        {copied ? "Ссылка скопирована ✓" : "🔗 Скопировать ссылку"}
-      </button>
-      <button type="button" onClick={downloadImage}>
-        🖼️ Сохранить как картинку
-      </button>
-    </div>
+      <div className="share-bar">
+        <button type="button" onClick={copyLink}>
+          {copied ? "Ссылка скопирована ✓" : "🔗 Скопировать ссылку"}
+        </button>
+        <button type="button" onClick={downloadImage} disabled={loadingImg}>
+          {loadingImg ? "Сохраняем…" : "🖼️ Сохранить как картинку"}
+        </button>
+      </div>
   );
 }

@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/duoapi/:path*",
+      "destination": "https://www.duolingo.com/:path*"
+    },
+    {
+      "source": "/duoimg/:path*",
+      "destination": "https://d3gq3s1iyyx31w.cloudfront.net/:path*"
+    },
+    {
+      "source": "/duocdn/:path*",
+      "destination": "https://s2.duolingo.com/:path*"
+    }
+  ]
+}

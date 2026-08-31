@@ -41,7 +41,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="app__header">
-        <h1>🦉 Duolingo Stats</h1>
+        <h1>Duolingo Stats</h1>
         <p>Статистика профиля Duolingo по никнейму</p>
       </header>
 

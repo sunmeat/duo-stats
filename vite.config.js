@@ -1,10 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Публичное API Duolingo (www.duolingo.com/2017-06-30/users) не отдаёт
-// CORS-заголовки, поэтому браузер напрямую его дёргать не может.
-// Решение — локальный dev-прокси: браузер стучится в /duoapi/...,
-// vite-сервер сам ходит на duolingo.com и отдаёт ответ обратно.
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -15,6 +11,18 @@ export default defineConfig({
         changeOrigin: true,
         secure: true,
         rewrite: (path) => path.replace(/^\/duoapi/, ""),
+      },
+      "/duoimg": {
+        target: "https://d3gq3s1iyyx31w.cloudfront.net",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/duoimg/, ""),
+      },
+      "/duocdn": {
+        target: "https://s2.duolingo.com",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/duocdn/, ""),
       },
     },
   },
