@@ -11,6 +11,10 @@
     {
       "source": "/duocdn/:path*",
       "destination": "https://s2.duolingo.com/:path*"
+    },
+    {
+      "source": "/((?!api/.*).*)",
+      "destination": "/index.html"
     }
   ]
 }
