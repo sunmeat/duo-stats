@@ -5,12 +5,18 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
 
   try {
+    const FIELDS =
+      "username,name,streak,totalXp,picture,currentCourseId,creationDate,hasPlus,courses";
+
     const duoRes = await fetch(
-      `https://www.duolingo.com/2017-06-30/users?username=${username}`,
+      `https://www.duolingo.com/2017-06-30/users?username=${encodeURIComponent(
+        username
+      )}&fields=${FIELDS}`,
       {
         headers: {
           "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         },
       }
     );
@@ -33,38 +39,34 @@ export default async function handler(req, res) {
       user.streakData?.currentStreak?.length ?? 0
     );
 
-    // 1. Формируем прямой URL аватара в формате PNG/JPG
+    // --- ЛОГИКА ФОРМИРОВАНИЯ АВАТАРА (КАК В ВАШЕМ NORMALIZEUSER) ---
     let avatarBase64 = "";
-    let pictureUrl = "";
-
     if (user.picture) {
-      pictureUrl = user.picture.startsWith("//")
-        ? `https:${user.picture}`
-        : user.picture;
-
-      // Если аватар отдает .webp, заменяем размер/расширение на png или крупный размер
-      if (pictureUrl.includes("avatar")) {
-        pictureUrl = pictureUrl.replace("/medium", "/large");
+      let rawUrl = user.picture.startsWith("http")
+        ? user.picture
+        : `https:${user.picture}`;
+      
+      // Добавляем /xxlarge в конец, если там еще нет размера
+      if (!rawUrl.includes("/xxlarge") && !rawUrl.includes("/large")) {
+        rawUrl = rawUrl.replace(/\/$/, "") + "/xxlarge";
       }
-    } else if (user.avatarUrl) {
-      pictureUrl = user.avatarUrl;
+
+      avatarBase64 = await fetchImageAsBase64(rawUrl);
     }
 
-    if (pictureUrl) {
-      avatarBase64 = await fetchAsBase64(pictureUrl);
-    }
-
-    // 2. Дата регистрации
+    // Дата регистрации
     let creationDateStr = "";
     if (user.creationDate) {
-      const date = new Date(user.creationDate * 1000);
+      const date = new Date(
+        user.creationDate < 1e12 ? user.creationDate * 1000 : user.creationDate
+      );
       const day = String(date.getDate()).padStart(2, "0");
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const year = date.getFullYear();
       creationDateStr = `${day}.${month}.${year}`;
     }
 
-    // 3. Топ курсов и флаги
+    // Курсы и флаги
     const courses = (user.courses || [])
       .map((c) => ({
         title: c.title,
@@ -78,10 +80,13 @@ export default async function handler(req, res) {
 
     const coursesWithFlags = await Promise.all(
       courses.map(async (c) => {
-        const countryCode = getCountryCode(c.lang);
-        const flagBase64 = await fetchAsBase64(
-          `https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/${countryCode}.svg`
-        );
+        const countryCode = getCountryCode(c.lang, c.title);
+        let flagBase64 = "";
+        if (countryCode) {
+          flagBase64 = await fetchImageAsBase64(
+            `https://flagcdn.com/w40/${countryCode}.png`
+          );
+        }
         return { ...c, flagBase64 };
       })
     );
@@ -103,7 +108,7 @@ export default async function handler(req, res) {
             ${
               c.flagBase64
                 ? `<image href="${c.flagBase64}" width="24" height="20" clip-path="url(#flag-clip-${index})" preserveAspectRatio="xMidYMid slice" />`
-                : `<rect width="24" height="20" rx="4" fill="#37464f" />`
+                : `<rect width="24" height="20" rx="4" fill="#37464f" /><text x="12" y="14" font-size="12" text-anchor="middle" fill="white">📘</text>`
             }
           </g>
 
@@ -137,7 +142,6 @@ export default async function handler(req, res) {
 
         <!-- ЛЕВАЯ КОЛОНКА -->
         <g transform="translate(30, 25)">
-          <!-- Аватар -->
           <g transform="translate(72, 0)">
             <circle cx="38" cy="38" r="41" fill="#58cc02" />
             <clipPath id="avatar-clip">
@@ -155,13 +159,13 @@ export default async function handler(req, res) {
 
           <g transform="translate(0, 136)">
             <rect width="220" height="62" class="streak-card" />
-            <text x="110" y="22" text-anchor="middle" class="streak-label">STREAK</text>
+            <text x="110" y="22" text-anchor="middle" class="streak-label">СТРАЙК</text>
             <text x="110" y="49" text-anchor="middle" class="streak-val">${streak} 🔥</text>
           </g>
 
           ${
             creationDateStr
-              ? `<text x="110" y="228" text-anchor="middle" class="footer-text">Joined Duolingo ${creationDateStr}</text>`
+              ? `<text x="110" y="228" text-anchor="middle" class="footer-text">На Duolingo с ${creationDateStr}</text>`
               : ""
           }
         </g>
@@ -170,7 +174,7 @@ export default async function handler(req, res) {
 
         <!-- ПРАВАЯ КОЛОНКА -->
         <g transform="translate(300, 25)">
-          <text x="0" y="15" class="section-title">Top Courses (${courses.length})</text>
+          <text x="0" y="15" class="section-title">Топ курсов (${courses.length})</text>
           <g transform="translate(0, 28)">
             ${coursesSvg}
           </g>
@@ -184,46 +188,50 @@ export default async function handler(req, res) {
   }
 }
 
-async function fetchAsBase64(url) {
+// Загрузчик изображений в Base64 с эмуляцией браузерного запроса
+async function fetchImageAsBase64(url) {
   try {
     const res = await fetch(url, {
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Referer: "https://www.duolingo.com/",
+        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
       },
     });
+
     if (!res.ok) return "";
+
     const buffer = await res.arrayBuffer();
     let contentType = res.headers.get("content-type") || "image/png";
 
-    // SVG или стандартные форматы отставляем, webp подменяем для совместимости браузера с SVG
-    if (contentType.includes("svg")) {
-      contentType = "image/svg+xml";
+    // Если сервер отдал octet-stream или пустоту, заменяем на png/jpeg
+    if (contentType.includes("octet-stream") || !contentType.includes("image")) {
+      contentType = "image/png";
     }
 
     return `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
-  } catch {
+  } catch (e) {
     return "";
   }
 }
 
-function getCountryCode(lang) {
-  const map = {
-    en: "gb",
-    fr: "fr",
-    ar: "sa",
-    es: "es",
-    cs: "cz",
-    de: "de",
-    it: "it",
-    uk: "ua",
-    ru: "ru",
-    ja: "jp",
-    zh: "cn",
-    ko: "kr",
-    pt: "pt",
+function getCountryCode(lang, title) {
+  const COUNTRY_BY_LANG_CODE = {
+    en: "gb", es: "es", fr: "fr", de: "de", it: "it", pt: "pt",
+    ja: "jp", jp: "jp", ko: "kr", zs: "cn", zc: "cn", zh: "cn",
+    ru: "ru", uk: "ua", pl: "pl", nl: "nl", dn: "nl", sv: "se",
+    tr: "tr", ar: "sa", hi: "in", el: "gr", he: "il", id: "id",
+    vi: "vn", ro: "ro", hu: "hu", cs: "cz", da: "dk", nb: "no",
+    no: "no", fi: "fi", tl: "ph", sw: "ke", zu: "za", ht: "ht",
+    ga: "ie", ka: "ge", gn: "py",
   };
-  return map[lang] || lang;
+
+  const code = lang?.toLowerCase();
+  if (code && COUNTRY_BY_LANG_CODE[code]) {
+    return COUNTRY_BY_LANG_CODE[code];
+  }
+  return "";
 }
 
 function escapeXml(str) {
