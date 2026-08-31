@@ -22,10 +22,9 @@ https://duostat.vercel.app/api/card?username=taemnus
 
 * 🔎 Search for a Duolingo profile by username
 * 🦉 Display profile avatar and information
-* 🔥 Current and longest streak
-* ⭐ Total XP
-* 📚 List of learning courses
-* 👑 XP and crowns for each course
+* 🔥 Current streak
+* ⭐ XP by TOP-5 languages
+* 📚 List of TOP-5 languages
 * 🔗 Shareable profile URLs
 * 🖼️ Generate statistics cards as PNG
 * ⚡ Minimal interface with no registration
@@ -121,11 +120,8 @@ Depending on what Duolingo exposes publicly, the application can display informa
 * Display name
 * Avatar
 * Current streak
-* Longest streak
-* Total XP
 * Learning courses
 * XP per course
-* Crowns
 * Registration date
 * Super Duolingo status
 
