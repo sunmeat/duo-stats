@@ -1,10 +1,6 @@
 import { forwardRef } from "react";
 import CourseList from "./CourseList.jsx";
 
-// Флаги-эмодзи (🇵🇱, 🇯🇵 и т.п.) на многих версиях Windows рендерятся
-// как обычные буквы кода страны — нет нужного эмодзи-шрифта. Чтобы флаг
-// выглядел одинаково везде, рисуем его картинкой (flagcdn.com) по
-// ISO-коду страны, а не Unicode-эмодзи.
 const COUNTRY_BY_LANG_CODE = {
     en: "gb", es: "es", fr: "fr", de: "de", it: "it", pt: "pt",
     ja: "jp", jp: "jp", ko: "kr", zs: "cn", zc: "cn", zh: "cn",
@@ -27,14 +23,11 @@ const COUNTRY_BY_LANG_NAME = {
     zulu: "za",
 };
 
-// Языки без своей страны (конланги, региональные) — обычные эмодзи,
-// они НЕ построены из двух букв-регионов и рендерятся нормально везде.
 const ICON_BY_LANG_CODE = {
     eo: "⭐", la: "🏛️", tlh: "🖖", hv: "🐉", nv: "🏜️", hw: "🌺",
     cy: "🏴", gd: "🏴", yi: "🕎",
 };
 
-// Новые не-языковые предметы Duolingo.
 const SUBJECT_ICONS = [
     { match: /math/i, icon: "🧮" },
     { match: /chess|шахмат/i, icon: "♟️" },
@@ -60,6 +53,7 @@ function flagFor(lang, title) {
                 className="course__flag-img"
                 src={`https://flagcdn.com/24x18/${country}.png`}
                 alt=""
+                crossOrigin="anonymous"
                 width={24}
                 height={18}
                 onError={(e) => {
@@ -80,6 +74,7 @@ const ProfileCard = forwardRef(function ProfileCard({ user }, ref) {
                     className="card__avatar"
                     src={user.avatar || fallbackAvatar}
                     alt={`Аватар ${user.username}`}
+
                     onError={(e) => {
                         e.currentTarget.src = fallbackAvatarDataUri;
                     }}
@@ -93,7 +88,6 @@ const ProfileCard = forwardRef(function ProfileCard({ user }, ref) {
 
             <div className="stat-grid">
                 <Stat label="Страйк" value={`${user.streak} 🔥`} />
-                <Stat label="Опыт (XP)" value={user.totalXp.toLocaleString("ru-RU")} />
                 {user.longestStreak != null && (
                     <Stat label="Лучший страйк" value={`${user.longestStreak} 🔥`} />
                 )}

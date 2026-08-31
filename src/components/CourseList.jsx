@@ -3,15 +3,21 @@ export default function CourseList({ courses, flagFor }) {
         return <p className="courses__empty">Курсы не найдены или профиль скрыт.</p>;
     }
 
-    const maxXp = Math.max(...courses.map((c) => c.xp), 1);
+    const topCourses = courses.slice(0, 10);
+    const maxXp = Math.max(...topCourses.map((c) => c.xp), 1);
 
     return (
         <div className="courses">
-            <h2>Курсы ({courses.length})</h2>
+            <h2>
+                Топ курсов ({topCourses.length}
+                {courses.length > 10 ? ` из ${courses.length}` : ""})
+            </h2>
             <ul className="courses__list">
-                {courses.map((course) => (
+                {topCourses.map((course) => (
                     <li className="course" key={course.id}>
-                        <span className="course__flag">{flagFor(course.language, course.title)}</span>
+            <span className="course__flag">
+              {flagFor(course.language, course.title)}
+            </span>
                         <div className="course__body">
                             <div className="course__row">
                                 <span className="course__title">{course.title}</span>

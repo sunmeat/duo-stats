@@ -42,7 +42,7 @@ export default function App() {
     <div className="app">
       <header className="app__header">
         <h1>🦉 Duolingo Stats</h1>
-        <p>Полная статистика профиля Duolingo по никнейму</p>
+        <p>Статистика профиля Duolingo по никнейму</p>
       </header>
 
       <SearchBar initialValue={initialUsername} onSearch={load} loading={loading} />
@@ -59,9 +59,7 @@ export default function App() {
       )}
 
       <footer className="app__footer">
-        Данные берутся из публичного (неофициального) API Duolingo. Лига и
-        количество алмазов/рубин не отдаются без личного токена — подробности
-        в README.md.
+        Данные берутся из публичного (неофициального) API Duolingo.
       </footer>
     </div>
   );
