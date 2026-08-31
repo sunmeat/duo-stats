@@ -1,5 +1,4 @@
 {
-  "cleanUrls": true,
   "rewrites": [
     {
       "source": "/duoapi/:path*",
@@ -14,7 +13,11 @@
       "destination": "https://s2.duolingo.com/:path*"
     },
     {
-      "source": "/((?!api/.*).*)",
+      "source": "/api/card",
+      "destination": "/api/card.js"
+    },
+    {
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
