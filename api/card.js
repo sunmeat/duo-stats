@@ -1,14 +1,12 @@
 export default async function handler(req, res) {
-  // 1. Надежное извлечение username из параметров или URL
   let username = req.query.username || req.query.u;
-  
+
   if (!username && req.url) {
     try {
       const urlObj = new URL(req.url, "https://duostat.vercel.app");
-      username = urlObj.searchParams.get("username") || urlObj.searchParams.get("u");
-    } catch (e) {
-      // fallback
-    }
+      username =
+        urlObj.searchParams.get("username") || urlObj.searchParams.get("u");
+    } catch (e) {}
   }
 
   if (!username) {
@@ -19,9 +17,10 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
 
   try {
-    // 2. Запрос к Duolingo API без жесткой фильтрации по полям (из-за которой вылетал 403)
     const duoRes = await fetch(
-      `https://www.duolingo.com/2017-06-30/users?username=${encodeURIComponent(username)}`,
+      `https://www.duolingo.com/2017-06-30/users?username=${encodeURIComponent(
+        username
+      )}`,
       {
         headers: {
           "User-Agent":
@@ -49,7 +48,6 @@ export default async function handler(req, res) {
       user.streakData?.currentStreak?.length ?? 0
     );
 
-    // 3. Формирование ссылки на аватар и перевод в Base64
     let avatarBase64 = "";
     let rawPicture = user.picture || user.avatarUrl || "";
 
@@ -59,16 +57,17 @@ export default async function handler(req, res) {
       } else if (!rawPicture.startsWith("http")) {
         rawPicture = `https://${rawPicture}`;
       }
-      
-      // Формируем прямую ссылку на полноразмерное фото
-      if (rawPicture.includes("cloudfront.net") || rawPicture.includes("duolingo.com")) {
+
+      if (
+        rawPicture.includes("cloudfront.net") ||
+        rawPicture.includes("duolingo.com")
+      ) {
         rawPicture = rawPicture.replace(/\/$/, "") + "/xxlarge";
       }
 
       avatarBase64 = await fetchImageAsBase64(rawPicture);
     }
 
-    // 4. Дата регистрации
     let creationDateStr = "";
     if (user.creationDate) {
       const date = new Date(
@@ -80,7 +79,6 @@ export default async function handler(req, res) {
       creationDateStr = `${day}.${month}.${year}`;
     }
 
-    // 5. Курсы и флаги
     const courses = (user.courses || [])
       .map((c) => ({
         title: c.title,
@@ -154,7 +152,6 @@ export default async function handler(req, res) {
 
         <rect width="600" height="280" class="bg border" />
 
-        <!-- ЛЕВАЯ КОЛОНКА -->
         <g transform="translate(30, 25)">
           <g transform="translate(72, 0)">
             <circle cx="38" cy="38" r="41" fill="#58cc02" />
@@ -173,22 +170,21 @@ export default async function handler(req, res) {
 
           <g transform="translate(0, 136)">
             <rect width="220" height="62" class="streak-card" />
-            <text x="110" y="22" text-anchor="middle" class="streak-label">СТРАЙК</text>
+            <text x="110" y="22" text-anchor="middle" class="streak-label">STREAK</text>
             <text x="110" y="49" text-anchor="middle" class="streak-val">${streak} 🔥</text>
           </g>
 
           ${
             creationDateStr
-              ? `<text x="110" y="228" text-anchor="middle" class="footer-text">На Duolingo с ${creationDateStr}</text>`
+              ? `<text x="110" y="228" text-anchor="middle" class="footer-text">Joined Duolingo ${creationDateStr}</text>`
               : ""
           }
         </g>
 
         <line x1="280" y1="30" x2="280" y2="250" stroke="#202f36" stroke-width="2" stroke-dasharray="4 4" />
 
-        <!-- ПРАВАЯ КОЛОНКА -->
         <g transform="translate(300, 25)">
-          <text x="0" y="15" class="section-title">Топ курсов (${courses.length})</text>
+          <text x="0" y="15" class="section-title">Top Courses (${courses.length})</text>
           <g transform="translate(0, 28)">
             ${coursesSvg}
           </g>
