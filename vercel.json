@@ -1,5 +1,16 @@
 {
+  "cleanUrls": true,
+  "functions": {
+    "src/api/card.js": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
   "rewrites": [
+    {
+      "source": "/api/card",
+      "destination": "/src/api/card.js"
+    },
     {
       "source": "/duoapi/:path*",
       "destination": "https://www.duolingo.com/:path*"
