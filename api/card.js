@@ -27,12 +27,22 @@ export default async function handler(req, res) {
       user.streakData?.currentStreak?.length ?? 0
     );
 
-    // Аватар
-    let avatarUrl = "https://d3gq3s1iyyx31w.cloudfront.net/default/avatar";
+    // Загружаем аватар и конвертируем в Base64 для GitHub
+    let avatarBase64 = "";
     if (user.picture) {
-      avatarUrl = user.picture.startsWith("http")
+      const picUrl = user.picture.startsWith("http")
         ? user.picture
         : `https:${user.picture}`;
+      try {
+        const imgRes = await fetch(picUrl);
+        if (imgRes.ok) {
+          const buffer = await imgRes.arrayBuffer();
+          const contentType = imgRes.headers.get("content-type") || "image/png";
+          avatarBase64 = `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
+        }
+      } catch (e) {
+        // Игнорируем ошибку загрузки аватара
+      }
     }
 
     // Дата регистрации
@@ -45,43 +55,59 @@ export default async function handler(req, res) {
       creationDateStr = `${day}.${month}.${year}`;
     }
 
-    // Обработка курсов/языков
+    // Курсы и иконки языков
     const courses = (user.courses || [])
       .map((c) => ({
         title: c.title,
         xp: c.xp || 0,
+        lang: c.learningLanguage || "",
       }))
       .sort((a, b) => b.xp - a.xp)
-      .slice(0, 5); // Берём топ-5
+      .slice(0, 5);
 
     const maxXp = courses[0]?.xp || 1;
 
-    // Генерация элементов списка языков справа
-    const coursesSvg = courses
-      .map((c, index) => {
-        const y = index * 42;
-        const progressWidth = Math.max(10, Math.round((c.xp / maxXp) * 190));
-        const formattedXp = c.xp.toLocaleString("ru-RU") + " XP";
+    // Загружаем флаговые иконки курсов в Base64
+    const coursesSvgPromises = courses.map(async (c, index) => {
+      const y = index * 42;
+      const progressWidth = Math.max(10, Math.round((c.xp / maxXp) * 165));
+      const formattedXp = c.xp.toLocaleString("en-US") + " XP";
 
-        return `
+      let flagBase64 = "";
+      if (c.lang) {
+        try {
+          const flagUrl = `https://s2.duolingo.com/images/flag-sprites-svg.svg#${c.lang}`;
+          // Альтернативный надежный CDN флаг:
+          const cdnFlagUrl = `https://d3gq3s1iyyx31w.cloudfront.net/images/flag-sprites-svg.svg#${c.lang}`;
+          flagBase64 = `https://s2.duolingo.com/images/flag-sprites-svg.svg#${c.lang}`;
+        } catch (e) {}
+      }
+
+      return `
         <g transform="translate(0, ${y})">
-          <!-- Фоны карточек языков -->
           <rect width="280" height="36" rx="10" fill="#202f36" />
           
+          <!-- Флаг / Иконка языка -->
+          <g transform="translate(10, 8)">
+            <svg width="24" height="20" viewBox="0 0 24 20">
+              <image href="https://s2.duolingo.com/images/flag-sprites-svg.svg#${c.lang}" width="24" height="20" />
+            </svg>
+          </g>
+
           <!-- Название языка -->
-          <text x="14" y="21" class="lang-title">${escapeXml(c.title)}</text>
+          <text x="40" y="21" class="lang-title">${escapeXml(c.title)}</text>
           
           <!-- Значение XP -->
           <text x="266" y="21" text-anchor="end" class="lang-xp">${formattedXp}</text>
           
-          <!-- Трек прогресс-бара -->
-          <rect x="14" y="27" width="252" height="4" rx="2" fill="#131f24" />
-          <!-- Желтая полоса прогресса -->
-          <rect x="14" y="27" width="${progressWidth}" height="4" rx="2" fill="#ffc800" />
+          <!-- Трек и Прогресс -->
+          <rect x="40" y="27" width="226" height="4" rx="2" fill="#131f24" />
+          <rect x="40" y="27" width="${progressWidth}" height="4" rx="2" fill="#ffc800" />
         </g>
       `;
-      })
-      .join("");
+    });
+
+    const coursesSvg = (await Promise.all(coursesSvgPromises)).join("");
 
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="600" height="280" viewBox="0 0 600 280" fill="none">
@@ -100,7 +126,7 @@ export default async function handler(req, res) {
 
         <rect width="600" height="280" class="bg border" />
 
-        <!-- ЛЕВАЯ КОЛОНКА: Профиль и Страйк -->
+        <!-- ЛЕВАЯ КОЛОНКА -->
         <g transform="translate(30, 25)">
           <!-- Аватар -->
           <g transform="translate(72, 0)">
@@ -108,34 +134,34 @@ export default async function handler(req, res) {
             <clipPath id="avatar-clip">
               <circle cx="38" cy="38" r="38" />
             </clipPath>
-            <image href="${avatarUrl}" x="0" y="0" height="76" width="76" clip-path="url(#avatar-clip)" preserveAspectRatio="xMidYMid slice" />
+            ${
+              avatarBase64
+                ? `<image href="${avatarBase64}" x="0" y="0" height="76" width="76" clip-path="url(#avatar-clip)" preserveAspectRatio="xMidYMid slice" />`
+                : `<circle cx="38" cy="38" r="38" fill="#37464f" /><text x="38" y="48" font-size="30" text-anchor="middle" fill="white">🦉</text>`
+            }
           </g>
 
-          <!-- Имя и Username -->
           <text x="110" y="102" text-anchor="middle" class="name">${name}</text>
           <text x="110" y="122" text-anchor="middle" class="username">@${cleanUsername}</text>
 
-          <!-- Плашка Страйка -->
           <g transform="translate(0, 138)">
             <rect width="220" height="60" rx="14" fill="#202f36" stroke="#ff9600" stroke-width="2" />
-            <text x="110" y="22" text-anchor="middle" class="streak-label">СТРАЙК</text>
+            <text x="110" y="22" text-anchor="middle" class="streak-label">STREAK</text>
             <text x="110" y="48" text-anchor="middle" class="streak-val">${streak} 🔥</text>
           </g>
 
-          <!-- Футер: Дата регистрации -->
           ${
             creationDateStr
-              ? `<text x="110" y="228" text-anchor="middle" class="footer-text">На Duolingo с ${creationDateStr}</text>`
+              ? `<text x="110" y="228" text-anchor="middle" class="footer-text">Joined Duolingo ${creationDateStr}</text>`
               : ""
           }
         </g>
 
-        <!-- Разделитель -->
         <line x1="280" y1="30" x2="280" y2="250" stroke="#202f36" stroke-width="2" stroke-dasharray="4 4" />
 
-        <!-- ПРАВАЯ КОЛОНКА: Топ курсов -->
+        <!-- ПРАВАЯ КОЛОНКА -->
         <g transform="translate(300, 25)">
-          <text x="0" y="15" class="section-title">Топ курсов (${courses.length})</text>
+          <text x="0" y="15" class="section-title">Top Courses (${courses.length})</text>
           <g transform="translate(0, 30)">
             ${coursesSvg}
           </g>
