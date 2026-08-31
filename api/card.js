@@ -1,35 +1,45 @@
 export default async function handler(req, res) {
-  const username = req.query.u || req.query.username || "taemnus";
+  // 1. Надежное извлечение username из параметров или URL
+  let username = req.query.username || req.query.u;
+  
+  if (!username && req.url) {
+    try {
+      const urlObj = new URL(req.url, "https://duostat.vercel.app");
+      username = urlObj.searchParams.get("username") || urlObj.searchParams.get("u");
+    } catch (e) {
+      // fallback
+    }
+  }
+
+  if (!username) {
+    username = "taemnus";
+  }
 
   res.setHeader("Content-Type", "image/svg+xml");
   res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
 
   try {
-    const FIELDS =
-      "username,name,streak,totalXp,picture,currentCourseId,creationDate,hasPlus,courses";
-
+    // 2. Запрос к Duolingo API без жесткой фильтрации по полям (из-за которой вылетал 403)
     const duoRes = await fetch(
-      `https://www.duolingo.com/2017-06-30/users?username=${encodeURIComponent(
-        username
-      )}&fields=${FIELDS}`,
+      `https://www.duolingo.com/2017-06-30/users?username=${encodeURIComponent(username)}`,
       {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+          Accept: "application/json",
         },
       }
     );
 
     if (!duoRes.ok) {
-      return res.status(404).send(getErrorSvg("User not found"));
+      return res.status(404).send(getErrorSvg(`User '${username}' not found`));
     }
 
     const duoData = await duoRes.json();
     const user = duoData?.users?.[0];
 
     if (!user) {
-      return res.status(404).send(getErrorSvg("User not found"));
+      return res.status(404).send(getErrorSvg(`User '${username}' not found`));
     }
 
     const name = escapeXml(user.name || user.username);
@@ -39,22 +49,26 @@ export default async function handler(req, res) {
       user.streakData?.currentStreak?.length ?? 0
     );
 
-    // --- ЛОГИКА ФОРМИРОВАНИЯ АВАТАРА (КАК В ВАШЕМ NORMALIZEUSER) ---
+    // 3. Формирование ссылки на аватар и перевод в Base64
     let avatarBase64 = "";
-    if (user.picture) {
-      let rawUrl = user.picture.startsWith("http")
-        ? user.picture
-        : `https:${user.picture}`;
+    let rawPicture = user.picture || user.avatarUrl || "";
+
+    if (rawPicture) {
+      if (rawPicture.startsWith("//")) {
+        rawPicture = `https:${rawPicture}`;
+      } else if (!rawPicture.startsWith("http")) {
+        rawPicture = `https://${rawPicture}`;
+      }
       
-      // Добавляем /xxlarge в конец, если там еще нет размера
-      if (!rawUrl.includes("/xxlarge") && !rawUrl.includes("/large")) {
-        rawUrl = rawUrl.replace(/\/$/, "") + "/xxlarge";
+      // Формируем прямую ссылку на полноразмерное фото
+      if (rawPicture.includes("cloudfront.net") || rawPicture.includes("duolingo.com")) {
+        rawPicture = rawPicture.replace(/\/$/, "") + "/xxlarge";
       }
 
-      avatarBase64 = await fetchImageAsBase64(rawUrl);
+      avatarBase64 = await fetchImageAsBase64(rawPicture);
     }
 
-    // Дата регистрации
+    // 4. Дата регистрации
     let creationDateStr = "";
     if (user.creationDate) {
       const date = new Date(
@@ -66,7 +80,7 @@ export default async function handler(req, res) {
       creationDateStr = `${day}.${month}.${year}`;
     }
 
-    // Курсы и флаги
+    // 5. Курсы и флаги
     const courses = (user.courses || [])
       .map((c) => ({
         title: c.title,
@@ -80,7 +94,7 @@ export default async function handler(req, res) {
 
     const coursesWithFlags = await Promise.all(
       courses.map(async (c) => {
-        const countryCode = getCountryCode(c.lang, c.title);
+        const countryCode = getCountryCode(c.lang);
         let flagBase64 = "";
         if (countryCode) {
           flagBase64 = await fetchImageAsBase64(
@@ -188,7 +202,6 @@ export default async function handler(req, res) {
   }
 }
 
-// Загрузчик изображений в Base64 с эмуляцией браузерного запроса
 async function fetchImageAsBase64(url) {
   try {
     const res = await fetch(url, {
@@ -196,7 +209,6 @@ async function fetchImageAsBase64(url) {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         Referer: "https://www.duolingo.com/",
-        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
       },
     });
 
@@ -205,7 +217,6 @@ async function fetchImageAsBase64(url) {
     const buffer = await res.arrayBuffer();
     let contentType = res.headers.get("content-type") || "image/png";
 
-    // Если сервер отдал octet-stream или пустоту, заменяем на png/jpeg
     if (contentType.includes("octet-stream") || !contentType.includes("image")) {
       contentType = "image/png";
     }
@@ -216,8 +227,8 @@ async function fetchImageAsBase64(url) {
   }
 }
 
-function getCountryCode(lang, title) {
-  const COUNTRY_BY_LANG_CODE = {
+function getCountryCode(lang) {
+  const map = {
     en: "gb", es: "es", fr: "fr", de: "de", it: "it", pt: "pt",
     ja: "jp", jp: "jp", ko: "kr", zs: "cn", zc: "cn", zh: "cn",
     ru: "ru", uk: "ua", pl: "pl", nl: "nl", dn: "nl", sv: "se",
@@ -226,12 +237,7 @@ function getCountryCode(lang, title) {
     no: "no", fi: "fi", tl: "ph", sw: "ke", zu: "za", ht: "ht",
     ga: "ie", ka: "ge", gn: "py",
   };
-
-  const code = lang?.toLowerCase();
-  if (code && COUNTRY_BY_LANG_CODE[code]) {
-    return COUNTRY_BY_LANG_CODE[code];
-  }
-  return "";
+  return map[lang?.toLowerCase()] || "";
 }
 
 function escapeXml(str) {
