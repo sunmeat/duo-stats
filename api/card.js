@@ -27,25 +27,16 @@ export default async function handler(req, res) {
       user.streakData?.currentStreak?.length ?? 0
     );
 
-    // Загружаем аватар и конвертируем в Base64 для GitHub
+    // 1. Конвертация аватара в Base64
     let avatarBase64 = "";
     if (user.picture) {
       const picUrl = user.picture.startsWith("http")
         ? user.picture
         : `https:${user.picture}`;
-      try {
-        const imgRes = await fetch(picUrl);
-        if (imgRes.ok) {
-          const buffer = await imgRes.arrayBuffer();
-          const contentType = imgRes.headers.get("content-type") || "image/png";
-          avatarBase64 = `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
-        }
-      } catch (e) {
-        // Игнорируем ошибку загрузки аватара
-      }
+      avatarBase64 = await fetchAsBase64(picUrl);
     }
 
-    // Дата регистрации
+    // 2. Дата регистрации
     let creationDateStr = "";
     if (user.creationDate) {
       const date = new Date(user.creationDate * 1000);
@@ -55,7 +46,7 @@ export default async function handler(req, res) {
       creationDateStr = `${day}.${month}.${year}`;
     }
 
-    // Курсы и иконки языков
+    // 3. Курсы и флаги
     const courses = (user.courses || [])
       .map((c) => ({
         title: c.title,
@@ -67,61 +58,75 @@ export default async function handler(req, res) {
 
     const maxXp = courses[0]?.xp || 1;
 
-    // Загружаем флаговые иконки курсов в Base64
-    const coursesSvgPromises = courses.map(async (c, index) => {
-      const y = index * 42;
-      const progressWidth = Math.max(10, Math.round((c.xp / maxXp) * 165));
-      const formattedXp = c.xp.toLocaleString("en-US") + " XP";
+    // Загрузка всех флагов в Base64 параллельно
+    const coursesWithFlags = await Promise.all(
+      courses.map(async (c) => {
+        // Качественные SVG-флаги из CDN
+        const flagUrl = `https://d3gq3s1iyyx31w.cloudfront.net/images/flag-sprites-svg.svg#${c.lang}`;
+        // Альтернативный надежный источник растровых/векторных иконок для Duolingo
+        const flagCdn = `https://countryflagsapi.netlify.app/flag/${c.lang}.svg`;
+        
+        // Векторные флаги Duolingo через локальный фетч
+        let flagBase64 = await fetchAsBase64(
+          `https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/${getCountryCode(c.lang)}.svg`
+        );
 
-      let flagBase64 = "";
-      if (c.lang) {
-        try {
-          const flagUrl = `https://s2.duolingo.com/images/flag-sprites-svg.svg#${c.lang}`;
-          // Альтернативный надежный CDN флаг:
-          const cdnFlagUrl = `https://d3gq3s1iyyx31w.cloudfront.net/images/flag-sprites-svg.svg#${c.lang}`;
-          flagBase64 = `https://s2.duolingo.com/images/flag-sprites-svg.svg#${c.lang}`;
-        } catch (e) {}
-      }
+        return { ...c, flagBase64 };
+      })
+    );
 
-      return `
+    // Рендер элементов списка курсов
+    const coursesSvg = coursesWithFlags
+      .map((c, index) => {
+        const y = index * 44;
+        const progressWidth = Math.max(12, Math.round((c.xp / maxXp) * 160));
+        const formattedXp = c.xp.toLocaleString("en-US") + " XP";
+
+        return `
         <g transform="translate(0, ${y})">
-          <rect width="280" height="36" rx="10" fill="#202f36" />
+          <!-- Карточка языка -->
+          <rect width="280" height="38" rx="12" fill="#202f36" />
           
-          <!-- Флаг / Иконка языка -->
-          <g transform="translate(10, 8)">
-            <svg width="24" height="20" viewBox="0 0 24 20">
-              <image href="https://s2.duolingo.com/images/flag-sprites-svg.svg#${c.lang}" width="24" height="20" />
-            </svg>
+          <!-- Флаг -->
+          <g transform="translate(10, 9)">
+            <clipPath id="flag-clip-${index}">
+              <rect width="24" height="20" rx="4" />
+            </clipPath>
+            ${
+              c.flagBase64
+                ? `<image href="${c.flagBase64}" width="24" height="20" clip-path="url(#flag-clip-${index})" preserveAspectRatio="xMidYMid slice" />`
+                : `<rect width="24" height="20" rx="4" fill="#37464f" />`
+            }
           </g>
 
           <!-- Название языка -->
-          <text x="40" y="21" class="lang-title">${escapeXml(c.title)}</text>
+          <text x="42" y="22" class="lang-title">${escapeXml(c.title)}</text>
           
-          <!-- Значение XP -->
-          <text x="266" y="21" text-anchor="end" class="lang-xp">${formattedXp}</text>
+          <!-- Количество XP -->
+          <text x="268" y="22" text-anchor="end" class="lang-xp">${formattedXp}</text>
           
-          <!-- Трек и Прогресс -->
-          <rect x="40" y="27" width="226" height="4" rx="2" fill="#131f24" />
-          <rect x="40" y="27" width="${progressWidth}" height="4" rx="2" fill="#ffc800" />
+          <!-- Прогресс-бар в стиле Duolingo -->
+          <rect x="42" y="28" width="226" height="5" rx="2.5" fill="#131f24" />
+          <rect x="42" y="28" width="${progressWidth}" height="5" rx="2.5" fill="#ffc800" />
         </g>
       `;
-    });
-
-    const coursesSvg = (await Promise.all(coursesSvgPromises)).join("");
+      })
+      .join("");
 
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="600" height="280" viewBox="0 0 600 280" fill="none">
         <style>
           .bg { fill: #131f24; rx: 20px; }
           .border { stroke: #202f36; stroke-width: 2px; }
-          .name { font: bold 22px 'Segoe UI', Ubuntu, sans-serif; fill: #ffffff; }
-          .username { font: 14px 'Segoe UI', Ubuntu, sans-serif; fill: #52656d; }
-          .streak-label { font: bold 11px 'Segoe UI', Ubuntu, sans-serif; fill: #8496a0; letter-spacing: 1px; text-transform: uppercase; }
-          .streak-val { font: bold 26px 'Segoe UI', Ubuntu, sans-serif; fill: #ff9600; }
+          .name { font: bold 22px 'Feather', 'Segoe UI', Ubuntu, sans-serif; fill: #ffffff; }
+          .username { font: bold 14px 'Segoe UI', Ubuntu, sans-serif; fill: #52656d; }
+          .streak-card { fill: #202f36; stroke: #ff9600; stroke-width: 2px; rx: 14px; }
+          .streak-label { font: bold 11px 'Segoe UI', Ubuntu, sans-serif; fill: #ff9600; letter-spacing: 1px; text-transform: uppercase; }
+          .streak-val { font: bold 26px 'Segoe UI', Ubuntu, sans-serif; fill: #ffffff; }
           .section-title { font: bold 16px 'Segoe UI', Ubuntu, sans-serif; fill: #ffffff; }
           .lang-title { font: bold 13px 'Segoe UI', Ubuntu, sans-serif; fill: #ffffff; }
           .lang-xp { font: bold 12px 'Segoe UI', Ubuntu, sans-serif; fill: #8496a0; }
-          .footer-text { font: 12px 'Segoe UI', Ubuntu, sans-serif; fill: #52656d; }
+          .footer-text { font: bold 12px 'Segoe UI', Ubuntu, sans-serif; fill: #52656d; }
         </style>
 
         <rect width="600" height="280" class="bg border" />
@@ -144,10 +149,11 @@ export default async function handler(req, res) {
           <text x="110" y="102" text-anchor="middle" class="name">${name}</text>
           <text x="110" y="122" text-anchor="middle" class="username">@${cleanUsername}</text>
 
-          <g transform="translate(0, 138)">
-            <rect width="220" height="60" rx="14" fill="#202f36" stroke="#ff9600" stroke-width="2" />
+          <!-- Плашка Страйка -->
+          <g transform="translate(0, 136)">
+            <rect width="220" height="62" class="streak-card" />
             <text x="110" y="22" text-anchor="middle" class="streak-label">STREAK</text>
-            <text x="110" y="48" text-anchor="middle" class="streak-val">${streak} 🔥</text>
+            <text x="110" y="49" text-anchor="middle" class="streak-val">${streak} 🔥</text>
           </g>
 
           ${
@@ -157,12 +163,13 @@ export default async function handler(req, res) {
           }
         </g>
 
+        <!-- Вертикальный разделитель -->
         <line x1="280" y1="30" x2="280" y2="250" stroke="#202f36" stroke-width="2" stroke-dasharray="4 4" />
 
         <!-- ПРАВАЯ КОЛОНКА -->
         <g transform="translate(300, 25)">
           <text x="0" y="15" class="section-title">Top Courses (${courses.length})</text>
-          <g transform="translate(0, 30)">
+          <g transform="translate(0, 28)">
             ${coursesSvg}
           </g>
         </g>
@@ -173,6 +180,39 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(500).send(getErrorSvg("Server Error"));
   }
+}
+
+// Вспомогательная функция для фетча и конвертации ассетов в Base64
+async function fetchAsBase64(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return "";
+    const buffer = await res.arrayBuffer();
+    const contentType = res.headers.get("content-type") || "image/png";
+    return `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
+  } catch {
+    return "";
+  }
+}
+
+// Маппинг кодов языков Duolingo на коды стран для флагов
+function getCountryCode(lang) {
+  const map = {
+    en: "gb",
+    fr: "fr",
+    ar: "sa",
+    es: "es",
+    cs: "cz",
+    de: "de",
+    it: "it",
+    uk: "ua",
+    ru: "ru",
+    ja: "jp",
+    zh: "cn",
+    ko: "kr",
+    pt: "pt",
+  };
+  return map[lang] || lang;
 }
 
 function escapeXml(str) {
