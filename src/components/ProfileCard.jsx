@@ -67,27 +67,44 @@ function flagFor(lang, title) {
 }
 
 const ProfileCard = forwardRef(function ProfileCard({ user }, ref) {
+    const profileUrl = `https://www.duolingo.com/profile/${user.username}`;
+
     return (
         <div className="card" ref={ref}>
             <div className="card__header">
-                <img
-                    className="card__avatar"
-                    src={user.avatar || fallbackAvatar}
-                    alt={`Аватар ${user.username}`}
-
-                    onError={(e) => {
-                        e.currentTarget.src = fallbackAvatarDataUri;
-                    }}
-                />
-                <div className="card__id">
-                    <h1>{user.name}</h1>
-                    <p className="card__username">@{user.username}</p>
-                    {user.hasPlus && <span className="badge badge--plus">Super</span>}
-                </div>
+                <a
+                    href={profileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="profile-link"
+                >
+                    <img
+                        className="card__avatar"
+                        src={user.avatar || fallbackAvatar}
+                        alt={`Аватар ${user.username}`}
+                        onError={(e) => {
+                            e.currentTarget.src = fallbackAvatarDataUri;
+                        }}
+                    />
+                    <div className="card__id">
+                        <h1>{user.name}</h1>
+                        <p className="card__username">@{user.username}</p>
+                        {user.hasPlus && <span className="badge badge--plus">Super</span>}
+                    </div>
+                </a>
             </div>
 
             <div className="stat-grid">
-                <Stat label="Страйк" value={`${user.streak} 🔥`} />
+                <a
+                    href={profileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="stat stat--streak stat--clickable"
+                >
+                    <span className="stat__label">Страйк</span>
+                    <span className="stat__value">{user.streak} 🔥</span>
+                </a>
+
                 {user.longestStreak != null && (
                     <Stat label="Лучший страйк" value={`${user.longestStreak} 🔥`} />
                 )}

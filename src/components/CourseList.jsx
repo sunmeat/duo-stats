@@ -3,7 +3,7 @@ export default function CourseList({ courses, flagFor }) {
         return <p className="courses__empty">Курсы не найдены или профиль скрыт.</p>;
     }
 
-    const topCourses = courses.slice(0, 10);
+    const topCourses = courses.slice(0, 5);
     const maxXp = Math.max(...topCourses.map((c) => c.xp), 1);
 
     return (

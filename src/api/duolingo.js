@@ -6,10 +6,8 @@ export async function fetchDuolingoUser(username) {
   const clean = username.trim();
   if (!clean) throw new Error("Введите никнейм");
 
-  // Попытка №1: с ограниченным набором полей
   let user = await tryFetch(clean, FIELDS);
 
-  // Попытка №2: без fields — на случай, если какое-то поле сломало ответ
   if (!user) {
     user = await tryFetch(clean, null);
   }
@@ -60,14 +58,11 @@ function normalizeUser(raw) {
       }))
       .sort((a, b) => b.xp - a.xp);
 
-  // Общий опыт считаем по ВСЕМ курсам
   const coursesXpSum = allCourses.reduce((sum, c) => sum + c.xp, 0);
   const totalXp = Math.max(raw.totalXp ?? 0, coursesXpSum);
 
-  // Для отображения оставляем только топ-10
-  const courses = allCourses.slice(0, 10);
+  const courses = allCourses.slice(0, 5);
 
-  // creationDate приходит в секундах → переводим в миллисекунды
   const joined = raw.creationDate
       ? new Date(
           raw.creationDate < 1e12
