@@ -45,7 +45,7 @@ export default function App() {
         <h1>Duolingo Stats</h1>
         <p>Статистика профиля Duolingo по никнейму</p>
       </header>
-
+      <Analytics />
       <SearchBar initialValue={initialUsername} onSearch={load} loading={loading} />
 
       {error && <p className="error">⚠️ {error}</p>}
