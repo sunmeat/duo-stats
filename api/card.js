@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   }
 
   res.setHeader("Content-Type", "image/svg+xml");
-  res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
 
   try {
     const duoRes = await fetch(
