@@ -85,7 +85,9 @@ export default async function handler(req, res) {
 
     const courses = (user.courses || [])
       .map((c) => ({
-        title: c.title,
+        title: c.fromLanguage
+          ? `${c.title} (${c.fromLanguage})`
+          : c.title,
         xp: c.xp || 0,
         lang: c.learningLanguage || "",
       }))
